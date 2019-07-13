@@ -1,88 +1,67 @@
 #include "SearchHandler.hh"
-#include <unistd.h>
 
-std::vector<std::string> SearchHandler::paramKey;
-std::mutex SearchHandler::mutexTheard;
-std::set<SearchStructure, CustomCompare> SearchHandler::output;
-std::thread SearchHandler::thWorker[MAX_THEARD];
-
-SearchHandler::SearchHandler(std::string keyWord)
+SearchHandler::SearchHandler(ParsingTextFile* p)
 {
-    this->keyWord = keyWord;
-
-    paramKey = resplit(keyWord);
+    parsing = p;
 }
 
-std::vector<std::string> SearchHandler::resplit(const std::string &s, std::string rgx_str)
+std::vector<std::string> SearchHandler::search(std::string key)
 {
-    std::vector<std::string> elems;
-    std::regex rgx (rgx_str);
-    std::sregex_token_iterator iter(s.begin(), s.end(), rgx, -1);
+    std::string&& unsignedKey = parsing->convertUnsignedString(key);
+    std::regex rgx ("\\s+");
+    std::sregex_token_iterator iter(unsignedKey.begin(), unsignedKey.end(), rgx, -1);
     std::sregex_token_iterator end;
-
-    while (iter != end)  {
-        elems.push_back(*iter);
-        ++iter;
-    }
-    return elems;
-}
-
-void SearchHandler::threadWorker(int index)
-{
-    if (index != 0)
-    {
-        sleep(1);
-    }
-
-    ParsingTextFile parsingFile("./../data/product_names.txt", MAX_THEARD, index);
-    if (index == 0)
-    {
-        parsingFile.buildBlock();
-    }
-
+    std::map<std::string, std::vector<uint32_t>*>::iterator itr;
     
-    std::string data = parsingFile.getData();
-    while(!data.empty())
-    {
-        int prioriy = -1;
+    std::vector<uint32_t> second;
+    std::vector<uint32_t> matched;
 
-        for (auto& itr : paramKey)
+    auto mapIndex = parsing->getMapInvertedIndex();
+    auto hashTable = parsing->getHashTable();
+
+    for (; iter != end; iter++)
+    {
+        itr = mapIndex.find(*iter);
+        if (itr != mapIndex.end())
         {
-            if (data.find(itr) != std::string::npos)
-            {
-                prioriy++;
-            }
-        }
-        
-        if (prioriy >= 0)
-        {
-            std::unique_lock<std::mutex> lock(mutexTheard);
-            output.insert(SearchStructure(data, prioriy));
-            lock.unlock();
+            second = *(itr->second);
         }
 
-        data = parsingFile.getData();
+        matched = intersection(matched, second);
     }
 
+    std::vector<std::string> result;
+    std::unordered_map<uint32_t, std::string>::iterator got;
+
+    for (auto& itr : matched)
+    {
+        got = hashTable.find(itr);
+        if (got != hashTable.end())
+        {
+            result.push_back(got->second);
+            std::cout << got->second << std::endl;
+        }
+    }
+
+    return result;
 }
 
-void SearchHandler::execute()
+std::vector<uint32_t> SearchHandler::intersection(std::vector<uint32_t>& first, std::vector<uint32_t>& second)
 {
-    for (int i = 0; i < MAX_THEARD; i++)
+    if (first.empty())
     {
-        thWorker[i] = std::thread(threadWorker, i);
+        return second;
     }
 
-    for (int i = 0; i < MAX_THEARD; i++)
-    {
-        thWorker[i].join();
-    }
-}
+    std::vector<uint32_t> match(first.size());
+    std::vector<uint32_t>::iterator it;
 
-void SearchHandler::showResult()
-{
-    for (auto& itr : output)
-    {
-        std::cout << itr.name << std::endl;
-    }
+    std::sort(first.begin(), first.end());
+    std::sort(second.begin(), second.end());
+
+    it = std::set_intersection(first.begin(), first.end(),
+                                second.begin(), second.end(), match.begin()); 
+
+    match.resize(it - match.begin());
+    return match;
 }
