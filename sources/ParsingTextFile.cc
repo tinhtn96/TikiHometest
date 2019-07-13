@@ -36,7 +36,7 @@ std::vector<std::string> ParsingTextFile::sign = {
 };
 
 std::map<std::string, std::vector<uint32_t>*> ParsingTextFile::mapInvertedIndex;
-std::unordered_map<uint32_t, std::string> ParsingTextFile::hashTable;
+std::unordered_map<uint32_t, std::pair<std::string, uint32_t>> ParsingTextFile::hashTable;
 std::queue <std::pair<uint32_t, std::string>*> ParsingTextFile::container;
 std::mutex ParsingTextFile::mContainer;
 std::mutex ParsingTextFile::mMapInvertedIndex;
@@ -47,6 +47,7 @@ std::thread ParsingTextFile::thWorker[MAX_THEARD];
 
 ParsingTextFile::ParsingTextFile(std::string pathFile)
 {
+    this->pathFile = pathFile;
     file = std::ifstream(pathFile);
 }
 
@@ -73,15 +74,18 @@ void ParsingTextFile::worker(ParsingTextFile* p)
         container.pop();
         lck.unlock();
 
+        std::pair<std::string, uint32_t> pairHashTable;
+        pairHashTable.first = pairData->second;
         std::regex rgx ("\\s+");
         std::string unsignedString = p->convertUnsignedString(pairData->second);
         std::sregex_token_iterator iter(unsignedString.begin(), unsignedString.end(), rgx, -1);
         std::sregex_token_iterator end;
-
         std::map<std::string, std::vector<uint32_t>*>::iterator itr;
-
+        uint32_t countWord = 0;
         while (iter != end)  
         {
+            countWord++;
+
             std::unique_lock<std::mutex> l(mMapInvertedIndex);
 
             itr = mapInvertedIndex.find(*iter);
@@ -98,6 +102,12 @@ void ParsingTextFile::worker(ParsingTextFile* p)
             l.unlock();
             ++iter;
         }
+        pairHashTable.second = countWord;
+        
+        lck.lock();
+        hashTable[(uint32_t)pairData->first] = pairHashTable;
+        lck.unlock();
+
         delete pairData;
     }
 }
@@ -121,8 +131,6 @@ void ParsingTextFile::build()
         p->first = count;
         p->second = rawdata;
 
-        hashTable[count] = rawdata;
-
         container.push(p);
         condNotify.notify_all();
         lock.unlock();
@@ -144,4 +152,21 @@ std::string ParsingTextFile::convertUnsignedString(const std::string& input)
         output = std::regex_replace(output, std::regex(itr.second), itr.first);
     }
     return output;
+}
+
+uint32_t ParsingTextFile::getLineOfFile()
+{
+    FILE *fp;
+    char result[10];
+    const std::string command = "wc -l " + pathFile + " | cut -d \" \" -f1";
+    fp = popen(command.c_str(), "r");
+
+    if (fp == nullptr)
+    {
+        std::cout << "Can not execute the command: " << command << std::endl;
+        return 0;
+    }
+
+    fgets(result, 10, fp);
+    return std::atoi(result);
 }

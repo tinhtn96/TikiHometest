@@ -67,7 +67,7 @@ public:
     /**
      * Get Map Hash table
      */
-    std::unordered_map<uint32_t, std::string>& getHashTable()
+    std::unordered_map<uint32_t, std::pair<std::string, uint32_t>>& getHashTable()
     {
         return hashTable;
     }
@@ -77,6 +77,13 @@ public:
      */
     std::string convertUnsignedString(const std::string& input);
 
+    uint32_t getLineOfFile();
+
+    float getNumberWordOfD()
+    {
+        return (float)mapInvertedIndex.size();
+    }
+
     static std::vector<std::string> sign;
 
 private:
@@ -84,8 +91,9 @@ private:
     static void worker(ParsingTextFile* p);
     static std::map<std::string, std::string> convertTable;
     std::ifstream file;
+    std::string pathFile;
     static std::map<std::string, std::vector<uint32_t>*> mapInvertedIndex;
-    static std::unordered_map<uint32_t, std::string> hashTable;
+    static std::unordered_map<uint32_t, std::pair<std::string, uint32_t>> hashTable;
     static std::queue <std::pair<uint32_t, std::string>*> container;
     static std::mutex mContainer;
     static std::mutex mMapInvertedIndex;

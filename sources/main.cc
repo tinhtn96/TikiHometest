@@ -8,6 +8,7 @@
 #include <iterator> 
 #include <map> 
 #include "SearchHandler.hh"
+#include "BM25.hh"
 
 #define PATH_DATA_FILE  "./../data/product_names.txt"
 #define PATH_KEY_FILE   "./../data/100_query.txt"
@@ -30,16 +31,18 @@ std::vector<std::string> getKey(std::string key)
 int main () {
 
     ParsingTextFile* parser = new ParsingTextFile(PATH_DATA_FILE);
-    SearchHandler handler(parser);
+    // SearchHandler handler(parser);
     parser->build();
 
-    std::vector<std::string>&& keys = getKey(PATH_KEY_FILE);
+    // std::vector<std::string>&& keys = getKey(PATH_KEY_FILE);
 
-    for (auto& itr : keys)
-    {
-        std::cout << "************* Key is: " << itr << std::endl;
-        handler.search(itr);
-    }
+    // for (auto& itr : keys)
+    // {
+    //     std::cout << "************* Key is: " << itr << std::endl;
+    //     handler.search(itr);
+    // }
+    BM25 bm25(parser);
+    
     
     delete parser;
     return 0;

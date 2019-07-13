@@ -31,15 +31,15 @@ std::vector<std::string> SearchHandler::search(std::string key)
     }
 
     std::vector<std::string> result;
-    std::unordered_map<uint32_t, std::string>::iterator got;
+    std::unordered_map<uint32_t, std::pair<std::string, uint32_t>>::iterator got;
 
     for (auto& itr : matched)
     {
         got = hashTable.find(itr);
         if (got != hashTable.end())
         {
-            result.push_back(got->second);
-            std::cout << got->second << std::endl;
+            result.push_back(got->second.first);
+            std::cout << got->second.first << std::endl;
         }
     }
 
