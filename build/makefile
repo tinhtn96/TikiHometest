@@ -45,6 +45,7 @@ tikihometest: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
 	g++  -o "tikihometest" $(OBJS) $(USER_OBJS) $(LIBS) -std=c++11 -pthread
+# 	g++  -o "tikihometest" $(OBJS) $(USER_OBJS) $(LIBS) -std=c++11 -pthread -D__BM25__
 	@echo 'Finished building target: $@'
 	@echo ' '
 

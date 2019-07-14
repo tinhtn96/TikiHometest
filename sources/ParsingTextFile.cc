@@ -1,6 +1,18 @@
-#include "ParsingTextFile.hh"
-#include <unistd.h>
+/**
+ *
+ * @file: ParsingTextFile.cc
+ *
+ * @brief: The class implement some behavior for parsing text file
+ *         and build data structure
+ *
+ * @author Tinh Nguyen
+ * Contact: trongtinh.bk14@gmail.com
+ *
+ */
 
+#include "ParsingTextFile.hh"
+
+// Support converting to usigned Vietnamese
 std::map<std::string, std::string> ParsingTextFile::convertTable = {
     {"a", sign_a},
     {"A", sign_A},
@@ -18,6 +30,7 @@ std::map<std::string, std::string> ParsingTextFile::convertTable = {
     {"Y", sign_Y}
 };
 
+// Support detecting to signed Vietnamese
 std::vector<std::string> ParsingTextFile::sign = {
     "á", "à", "ạ", "ả", "ã", "â", "ấ", "ầ", "ậ", "ẩ", "ẫ", "ă", "ắ", "ằ", "ặ", "ẳ", "ẵ",
     "Á", "À", "Ạ", "Ả", "Ã", "Â", "Ấ", "Ầ", "Ậ", "Ẩ", "Ẫ", "Ă", "Ắ", "Ằ", "Ặ", "Ẳ", "Ẵ",
@@ -35,15 +48,22 @@ std::vector<std::string> ParsingTextFile::sign = {
     "Ý", "Ỳ", "Ỵ", "Ỷ", "Ỹ"
 };
 
-std::map<std::string, std::vector<uint32_t>*> ParsingTextFile::mapInvertedIndex;
 std::unordered_map<uint32_t, std::pair<std::string, uint32_t>> ParsingTextFile::hashTable;
 std::queue <std::pair<uint32_t, std::string>*> ParsingTextFile::container;
+
 std::mutex ParsingTextFile::mContainer;
 std::mutex ParsingTextFile::mMapInvertedIndex;
-bool ParsingTextFile::isRuning = false;
 
 std::condition_variable ParsingTextFile::condNotify;
 std::thread ParsingTextFile::thWorker[MAX_THEARD];
+
+std::map<std::string, std::unordered_map<uint32_t, uint32_t>> ParsingTextFile::mapInvertedIndexBM25;
+std::map<std::string, std::unordered_map<uint32_t, uint32_t>> ParsingTextFile::mapSignedInvertedIndexBM25;
+
+std::map<std::string, std::vector<uint32_t>*> ParsingTextFile::mapSignedInvertedIndex;
+std::map<std::string, std::vector<uint32_t>*> ParsingTextFile::mapInvertedIndex;
+
+bool ParsingTextFile::isRuning = false;
 
 ParsingTextFile::ParsingTextFile(std::string pathFile)
 {
@@ -56,11 +76,81 @@ ParsingTextFile::~ParsingTextFile()
     file.close();
 }
 
+uint32_t ParsingTextFile::parsingToMap(ParsingTextFile* p, const std::string& data, const uint32_t uniqueID, bool flag)
+{
+    std::string rawdata;
+
+    if (flag)
+    {
+        rawdata = p->convertUnsignedString(data);
+    }
+    else
+    {
+        rawdata = data;
+    }
+
+    std::regex rgx ("\\s+");
+    std::sregex_token_iterator iter(rawdata.begin(), rawdata.end(), rgx, -1);
+    std::sregex_token_iterator end;
+
+    std::map<std::string, std::vector<uint32_t>*>::iterator itr;
+    std::map<std::string, std::unordered_map<uint32_t, uint32_t>>::iterator itrBm25;
+    std::unordered_map<uint32_t, uint32_t> uniqueIdBM25;
+
+    uint32_t countWord = 0;
+    while (iter != end)
+    {
+        countWord++;
+        std::unique_lock<std::mutex> lock(mMapInvertedIndex);
+
+        if (flag)
+        {
+            itr = mapInvertedIndex.find(*iter);
+            itrBm25 = mapInvertedIndexBM25.find(*iter);
+            if (itr != mapInvertedIndex.end())
+            {
+                itr->second->push_back(uniqueID);
+                itrBm25->second[uniqueID]++;
+            }
+            else
+            {
+                std::vector<uint32_t>* vec = new std::vector<uint32_t>;
+                vec->push_back(uniqueID);
+                mapInvertedIndex.emplace(*iter, vec);
+
+                uniqueIdBM25[uniqueID] = 1;
+                mapInvertedIndexBM25.emplace(*iter, uniqueIdBM25);
+            }
+        }
+        else
+        {
+            itrBm25 = mapSignedInvertedIndexBM25.find(*iter);
+            itr = mapSignedInvertedIndex.find(*iter);
+            if (itr != mapSignedInvertedIndex.end())
+            {
+                itrBm25->second[uniqueID]++;
+                itr->second->push_back(uniqueID);
+            }
+            else
+            {
+                std::vector<uint32_t>* vec = new std::vector<uint32_t>;
+                vec->push_back(uniqueID);
+                mapSignedInvertedIndex.emplace(*iter, vec);
+                uniqueIdBM25[uniqueID] = 1;
+                mapSignedInvertedIndexBM25.emplace(*iter, uniqueIdBM25);
+            }
+        }
+        lock.unlock();
+        iter++;
+    }
+    return countWord;
+}
+
 void ParsingTextFile::worker(ParsingTextFile* p)
 {
     while(1)
     {
-        std::unique_lock<std::mutex> lck(mContainer);
+        std::unique_lock<std::mutex> lock(mContainer);
 
         while (container.empty())
         {
@@ -68,46 +158,23 @@ void ParsingTextFile::worker(ParsingTextFile* p)
             {
                 return;
             }
-            condNotify.wait(lck);
+            condNotify.wait(lock);
         }
         std::pair<uint32_t, std::string>* pairData = container.front();
         container.pop();
-        lck.unlock();
+        lock.unlock();
 
         std::pair<std::string, uint32_t> pairHashTable;
         pairHashTable.first = pairData->second;
-        std::regex rgx ("\\s+");
-        std::string unsignedString = p->convertUnsignedString(pairData->second);
-        std::sregex_token_iterator iter(unsignedString.begin(), unsignedString.end(), rgx, -1);
-        std::sregex_token_iterator end;
-        std::map<std::string, std::vector<uint32_t>*>::iterator itr;
-        uint32_t countWord = 0;
-        while (iter != end)  
-        {
-            countWord++;
 
-            std::unique_lock<std::mutex> l(mMapInvertedIndex);
+        // Build maps for unsigned string
+        pairHashTable.second = p->parsingToMap(p, pairData->second, pairData->first, true);
+        // Build maps for signed string
+        p->parsingToMap(p, pairData->second, pairData->first, false);
 
-            itr = mapInvertedIndex.find(*iter);
-            if (itr != mapInvertedIndex.end())
-            {
-                itr->second->push_back(pairData->first);
-            }
-            else
-            {
-                std::vector<uint32_t>* vec = new std::vector<uint32_t>;
-                vec->push_back(pairData->first);
-                mapInvertedIndex.emplace(*iter, vec);
-            }
-            l.unlock();
-            ++iter;
-        }
-        pairHashTable.second = countWord;
-        
-        lck.lock();
+        lock.lock();
         hashTable[(uint32_t)pairData->first] = pairHashTable;
-        lck.unlock();
-
+        lock.unlock();
         delete pairData;
     }
 }
