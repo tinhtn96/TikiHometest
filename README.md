@@ -21,10 +21,10 @@ Hometest
 |   |-- product_names.txt
 |-- document
 |   |-- Backend Hometest_Discovery Team.pdf
-|-- result
-|   |-- report.txt
-|   |-- result_bm25.txt
-|   |-- result_reverse_index.txt
+|	|-- result
+|	|   |-- report.txt
+|	|   |-- result_bm25.txt
+|	|   |-- result_reverse_index.txt
 |-- sources
 |   |-- BM25.cc
 |   |-- BM25.hh
