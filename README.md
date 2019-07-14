@@ -9,7 +9,7 @@ g++ (Ubuntu 8.3.0-6ubuntu1) 8.3.0
 
 ### Structure
 
-Hometest
+TikiHometest
 |-- build
 |   |-- sources
 |   |   |--subdir.mk
